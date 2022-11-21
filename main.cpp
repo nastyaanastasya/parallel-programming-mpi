@@ -1,4 +1,5 @@
 #include <cmath>
+#include <ctime>
 #include <iostream>
 #include <mpi.h>
 #include <unordered_map>
@@ -588,8 +589,8 @@ void task2_4(int argc, char *argv[]) {
         int count = cnt_a / line_num;
 
         int a[count][MATRIX_SIZE],
-            b[MATRIX_SIZE][MATRIX_SIZE],
-            c[count][MATRIX_SIZE];
+                b[MATRIX_SIZE][MATRIX_SIZE],
+                c[count][MATRIX_SIZE];
 
         MPI_Recv(&(a[0][0]), cnt_a, MPI_INT, SOURCE, TAG_SRC_A, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Recv(&(b[0][0]), cnt_b, MPI_INT, SOURCE, TAG_SRC_B, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -681,7 +682,7 @@ void task2_5(int argc, char *argv[]) {
         int count = cnt_a / col_num;
 
         int a[count][MATRIX_SIZE],
-            c[MATRIX_SIZE][MATRIX_SIZE];
+                c[MATRIX_SIZE][MATRIX_SIZE];
 
         MPI_Recv(&(a[0][0]), cnt_a, MPI_INT, SOURCE, TAG_SRC_A, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Recv(&(c[0][0]), cnt_c, MPI_INT, SOURCE, TAG_SRC_C, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -696,14 +697,279 @@ void task2_5(int argc, char *argv[]) {
     MPI_Finalize();
 }
 
+void task3_1(int argc, char *argv[]) {
+
+    int rank, size;
+
+    const int LIMIT = 10;
+    const int N = 20;
+
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    const int BLOCK_SIZE = N % size == 0 ? N / size : N / size + 1;
+
+    int x[N], y[BLOCK_SIZE];
+
+    if (rank == 0) {
+        for (int i = 0; i < N; i++) {
+            x[i] = rand() % LIMIT;
+            printf("%d ", x[i]);
+        }
+        printf("\n");
+    }
+
+    MPI_Scatter(&x[rank * BLOCK_SIZE], BLOCK_SIZE, MPI_INT, &y[0], BLOCK_SIZE, MPI_INT, 0, MPI_COMM_WORLD);
+
+    int sum = 0;
+    for (int i = 0; i < BLOCK_SIZE && rank * BLOCK_SIZE + i < N; i++) {
+        sum += abs(y[i]);
+    }
+
+    int result;
+    MPI_Reduce(&sum, &result, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Result sum: %d\n", result);
+    }
+    MPI_Finalize();
+}
+
+void task3_2(int argc, char *argv[]) {
+
+    int rank, size;
+
+    const int LIMIT = 10;
+    const int N = 20;
+
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    int x[N], y[N], x_local[N], y_local[N];
+
+    const int BLOCK_SIZE = N % size == 0 ? N / size : N / size + 1;
+
+    if (rank == 0) {
+        for (int i = 0; i < N; i++) {
+            x[i] = rand() % LIMIT;
+            y[i] = rand() % LIMIT;
+        }
+
+        printf("Vector x: ");
+        for (int i = 0; i < N; i++) {
+            printf("%d ", x[i]);
+        }
+        printf("\n");
+
+        printf("Vector y: ");
+        for (int i = 0; i < N; i++) {
+            printf("%d ", y[i]);
+        }
+        printf("\n");
+    }
+
+    MPI_Scatter(&x[rank * BLOCK_SIZE], BLOCK_SIZE, MPI_INT, &x_local[0], BLOCK_SIZE, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatter(&y[rank * BLOCK_SIZE], BLOCK_SIZE, MPI_INT, &y_local[0], BLOCK_SIZE, MPI_INT, 0, MPI_COMM_WORLD);
+
+    int sum = 0;
+    for (int i = 0; i < BLOCK_SIZE && rank * BLOCK_SIZE + i < N; i++) {
+        sum += x_local[i] * y_local[i];
+    }
+
+    int result;
+    MPI_Reduce(&sum, &result, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Result: %d\n", result);
+    }
+    MPI_Finalize();
+}
+
+void task3_3(int argc, char *argv[]) {
+
+    int rank, size;
+
+    const int LIMIT = 10;
+    const int N = 5;
+
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    int a[N][N], b[N];
+
+    const int BLOCK_SIZE = N % size == 0 ? N / size : N / size + 1;
+
+    if (rank == 0) {
+        printf("Matrix A:\n");
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                a[i][j] = rand() % LIMIT;
+                printf("%d ", a[i][j]);
+            }
+            printf("\n");
+        }
+        printf("\n");
+
+        printf("Vector b: ");
+        for (int i = 0; i < N; i++) {
+            b[i] = rand() % LIMIT;
+            printf("%d ", b[i]);
+        }
+        printf("\n\n");
+    }
+
+    int local_a[BLOCK_SIZE][N];
+
+    MPI_Bcast(&b[0], N, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatter(&a[rank * BLOCK_SIZE][0], BLOCK_SIZE * N, MPI_INT, &local_a[0][0], BLOCK_SIZE * N, MPI_INT, 0, MPI_COMM_WORLD);
+
+    int local_res[BLOCK_SIZE];
+    for (int i = 0; i < BLOCK_SIZE && rank * BLOCK_SIZE + i < N; i++) {
+        local_res[i] = 0;
+        for (int j = 0; j < N; j++) {
+            local_res[i] += local_a[i][j] * b[j];
+        }
+    }
+
+    int result[N];
+    MPI_Gather(&local_res[0], BLOCK_SIZE, MPI_INT, &result[rank * BLOCK_SIZE], BLOCK_SIZE, MPI_INT, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Result: ");
+        for (int i = 0; i < N; i++) {
+            printf("%d ", result[i]);
+        }
+        printf("\n");
+    }
+    MPI_Finalize();
+}
+
+void task3_4(int argc, char *argv[]) {
+
+    int rank, size;
+
+    const int LIMIT = 10;
+    const int N = 5, M = 4;
+
+    MPI_Init(&argc, &argv);
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    int result;
+    int a[N][M];
+
+    const int BLOCK_SIZE = N % size == 0 ? N / size : N / size + 1;
+
+    if (rank == 0) {
+
+        printf("Matrix a:\n");
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < M; j++) {
+                a[i][j] = rand() % LIMIT;
+                printf("%d ", a[i][j]);
+            }
+            printf("\n");
+        }
+    }
+
+    int a_local[BLOCK_SIZE][M];
+    MPI_Scatter(&a[rank * BLOCK_SIZE][0], BLOCK_SIZE * M, MPI_INT, &a_local[0][0], BLOCK_SIZE * M, MPI_INT, 0,MPI_COMM_WORLD);
+
+    int sum;
+    int max_value = INT_MIN;
+    for (int i = 0; i < BLOCK_SIZE && rank * BLOCK_SIZE + i < N; i++) {
+        sum = 0;
+        for (int j = 0; j < M; j++) {
+            sum += a_local[i][j];
+        }
+        max_value = sum > max_value ? sum : max_value;
+    }
+
+    MPI_Reduce(&max_value, &result, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Result: %d\n", result);
+    }
+    MPI_Finalize();
+}
+
+void task3_5(int argc, char *argv[]) {
+
+    int rank, size;
+
+    const int LIMIT = 10;
+    const int N = 5;
+
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    int a[N][N], b[N][N], c[N][N];
+
+    const int BLOCK_SIZE = N % size == 0 ? N / size : N / size + 1;
+
+    if (rank == 0) {
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                a[i][j] = rand() % LIMIT;
+                b[i][j] = rand() % LIMIT;
+            }
+        }
+
+        printf("Matrix A:\n");
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                printf("%d ", a[i][j]);
+            }
+            printf("\n");
+        }
+        printf("\n");
+
+        printf("Matrix B:\n");
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                printf("%d ", b[i][j]);
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
+
+    int local_a[BLOCK_SIZE][N],
+            local_b[BLOCK_SIZE][N],
+            local_c[BLOCK_SIZE][N];
+
+    MPI_Scatter(&a[rank * BLOCK_SIZE][0], BLOCK_SIZE * N, MPI_INT, &local_a[0][0], BLOCK_SIZE * N, MPI_INT, 0,
+                MPI_COMM_WORLD);
+    MPI_Scatter(&b[rank * BLOCK_SIZE][0], BLOCK_SIZE * N, MPI_INT, &local_b[0][0], BLOCK_SIZE * N, MPI_INT, 0,
+                MPI_COMM_WORLD);
+
+    for (int i = 0; i < BLOCK_SIZE && rank * BLOCK_SIZE + i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            local_c[i][j] = local_a[i][j] * local_b[i][j];
+        }
+    }
+    MPI_Gather(&local_c[0][0], BLOCK_SIZE * N, MPI_INT, &c[rank * BLOCK_SIZE][0], BLOCK_SIZE * N, MPI_INT, 0,
+               MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        printf("Result matrix C:\n");
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                printf("%d ", c[i][j]);
+            }
+            printf("\n");
+        }
+    }
+    MPI_Finalize();
+}
+
 int main(int argc, char *argv[]) {
     srand(time(0));
-
-    task2_1(argc, argv);
-    task2_2(argc, argv);
-    task2_3(argc, argv);
-    task2_4(argc, argv);
-    task2_5(argc, argv);
 
     return 0;
 }
